@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="meteostatFlow" doc:id="67fbe40b-d678-4043-affa-54e2a7c57ba9" >
+		<http:listener doc:name="Listener" doc:id="56d5645b-efdb-4439-96e6-8407c1dcdf93" config-ref="HTTP_Listener_config" path="${http.path}"/>
+		<logger level="INFO" doc:name="meteostat flow started " doc:id="648b3cb1-e9fa-4dd0-953f-d89f193a1af7" message="#[correlationId] meteostat flow started "/>
+		<http:request method="GET" doc:name="Request for meteostat data" doc:id="2981cb3a-8201-49b7-8fae-0dd68ff6de75" config-ref="HTTP_Request_configuration" path="${HttpRequest.path}">
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"start" : attributes.queryParams.start,
+	"key" : attributes.queryParams.key,
+	"end" : attributes.queryParams.end,
+	"station" : attributes.queryParams.station
+}]]]></http:query-params>
+		</http:request>
+		<logger level="INFO" doc:name="Logger" doc:id="e4599dae-38b1-490b-8f76-e5810e9546c1" message="#[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="bb5182ea-d5db-4613-939b-dd893e8423f0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var month = "12"
+fun getMonth(temp) = (temp splitBy "-")[1]
+fun maxTemp(temp) = max(temp)
+---
+{
+ max_temperatue_month: maxTemp(payload.data[?(getMonth($.date) == month)] map  $.temperature_max),
+ avg_precipitation_month: (payload.data groupBy ((item, index) -> getMonth(item.date))) mapObject  ({
+ '$$': avg($[?($.precipitation != null)] map $.precipitation)
+}),
+"week1": min(((payload.data)[0 to 6] map $.temperature_min) filter $!=null) ,
+"week2": min(((payload.data)[7 to 14] map $.temperature_min) filter $!=null),
+"week3": min(((payload.data)[15 to 21] map $.temperature_min) filter $!=null) ,
+"week4": min(((payload.data)[7 to ((max((payload.data) map $.date) splitBy "-")[2] as Number) - 1] map $.temperature_min) filter $!=null)
+
+
+ }]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="meteostat flow ended" doc:id="7282f274-df7c-411e-ab66-90f5860add45" message="#[correlationId] meteostat flow ended"/>
+	</flow>
+</mule>
